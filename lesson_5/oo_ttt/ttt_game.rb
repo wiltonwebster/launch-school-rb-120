@@ -1,4 +1,168 @@
-require 'pry'
+module Displayable
+  def clear
+    system 'clear'
+  end
+
+  def clear_screen_and_display_score_and_board
+    clear
+    display_current_score
+    display_board
+  end
+
+  def display_introduction
+    display_general_rules
+    display_marking_board_rules
+    display_scoring_rules
+    prompt "Press enter to begin the match."
+    gets
+    clear
+    display_players
+    display_who_goes_first
+  end
+
+  def display_general_rules
+    prompt "Rules:"
+    puts "The player going first will be randomly selected for the first round."
+    puts "After that, the player going first will alternate every round."
+    puts "Players will take turns marking one square at a time on the board."
+    line_break
+  end
+
+  def display_marking_board_rules
+    prompt "Marking the board:"
+    puts "Each square is numbered:"
+    display_example_board
+    puts "To mark a square, enter the square's number."
+    line_break
+  end
+
+  def display_example_board
+    board.example
+    display_board
+    board.reset
+  end
+
+  def display_scoring_rules
+    prompt "Scoring:"
+    puts "Marking 3 squares in a row, column, or diagonal earns you 1 point."
+    puts "If a round ends in a draw, both players earn half a point."
+    puts "First player to #{TTTGame::WINNING_SCORE} points wins the match!"
+    line_break
+  end
+
+  def display_players
+    prompt "#{player1.name} vs. #{player2.name}"
+  end
+
+  def display_who_goes_first
+    delay_animation("Selecting which player starts", 3)
+    prompt "#{player_going_first.name} goes first!"
+    delay_animation("Starting game", 3)
+    clear
+  end
+
+  def display_board
+    line_break
+    board.draw
+    line_break
+  end
+
+  def display_score_and_board
+    display_current_score
+    display_board
+  end
+
+  def display_result
+    clear_screen_and_display_score_and_board
+
+    case board.winning_marker
+    when player1.marker
+      prompt "#{player1.name} wins and earns a point!"
+    when player2.marker
+      prompt "#{player2.name} wins and earns a point!"
+    else
+      prompt "It's a tie! Each player earns half a point."
+    end
+  end
+
+  def display_current_score
+    puts "====================="
+    puts "    CURRENT SCORE    "
+    puts "#{player1.name} (#{player1.marker}) - #{player1.score}"
+    puts "#{player2.name} (#{player2.marker}) - #{player2.score}"
+    puts "====================="
+    puts "First to #{TTTGame::WINNING_SCORE} point wins!"
+  end
+
+  def display_match_result
+    delay_animation("The match is over! Tabulating results", 3)
+    clear
+    display_match_final_screen
+  end
+
+  def display_match_final_screen
+    display_final_score
+    case player1 <=> player2
+    when -1
+      prompt "#{player2.name} won the match!"
+    when 1
+      prompt "#{player1.name} won the match!"
+    else
+      prompt "The match is a tie!"
+    end
+  end
+
+  def display_final_score
+    puts "====================="
+    puts "     FINAL SCORE     "
+    puts "#{player1.name} - #{player1.score}"
+    puts "#{player2.name} - #{player2.score}"
+    puts "====================="
+  end
+
+  def display_welcome_message
+    prompt "Welcome to Tic Tac Toe!"
+    line_break
+  end
+
+  def display_play_again_message
+    prompt "Let's play again!"
+    line_break
+  end
+
+  def display_goodbye_message
+    prompt "Thanks for playing Tic Tac Toe! Goodbye!"
+  end
+end
+
+module Formattable
+  def prompt(message)
+    puts "=> #{message}"
+  end
+
+  def joinor(list, delimiter = ', ', conjunction = 'or')
+    case list.size
+    when (0..1) then list.join
+    when 2 then list.join(" #{conjunction} ")
+    else list[0..-2].join(delimiter) + "#{delimiter}#{conjunction} #{list[-1]}"
+    end
+  end
+
+  def line_break
+    puts ""
+  end
+end
+
+module Animatable
+  def delay_animation(message, seconds)
+    print "=> #{message}"
+    3.times do
+      print "."
+      sleep(seconds / 3)
+    end
+    line_break
+  end
+end
 
 class Board
   WINNING_LINES = [[1, 2, 3], [4, 5, 6], [7, 8, 9]] + # rows
@@ -32,6 +196,10 @@ class Board
 
   def full?
     unmarked_keys.empty?
+  end
+
+  def example
+    @squares.each { |key, square| square.marker = key.to_s }
   end
 
   def someone_won?
@@ -113,43 +281,172 @@ class Square
 end
 
 class Player
-  COMPUTER_NAMES = %w(Hal R2D2 Sonny Optimus Ultron)
+  include Formattable, Animatable
 
-  attr_accessor :marker, :score, :type, :name
+  attr_accessor :marker, :score, :name, :opponent
 
-  def initialize(name)
-    @name = name
+  def initialize
     @marker = nil
     @score = 0
-  end
-
-  def human?
-    type == :human
   end
 
   def <=>(other_player)
     score <=> other_player.score
   end
+
+  private
+
+  def duplicate_name?
+    name == opponent.name
+  end
+end
+
+class Human < Player
+  def initialize(name)
+    super()
+    @name = name
+  end
+
+  def choose_name
+    prompt "#{name} please enter your name:"
+    self.name = gets.chomp
+    loop do
+      break if !too_long? && contains_alphanumeric? && !duplicate_name?
+      name_error_prompt
+      self.name = gets.chomp
+    end
+  end
+
+  def choose_marker
+    prompt "Please choose a letter to use as your marker:"
+    self.marker = gets.chomp.upcase
+    loop do
+      break if valid_marker? && !duplicate_marker?
+      marker_error_prompt
+      self.marker = gets.chomp.upcase
+    end
+  end
+
+  def move(board)
+    prompt "Choose a square (#{joinor(board.unmarked_keys)}): "
+    square = nil
+    loop do
+      square = gets.chomp.to_i
+      break if board.unmarked_keys.include?(square)
+      prompt "Sorry, that's not a valid choice."
+    end
+
+    board[square] = marker
+  end
+
+  private
+
+  def too_long?
+    name.size > 10
+  end
+
+  def contains_alphanumeric?
+    name.count("A-Za-z0-9") > 0
+  end
+
+  def name_error_prompt
+    if too_long?
+      prompt "Please enter a name that is 10 or fewer characters:"
+    elsif !contains_alphanumeric?
+      prompt "Please enter a name with at least 1 alphanumeric character:"
+    elsif duplicate_name?
+      prompt "Both players must have unique names. Please enter something else:"
+    end
+  end
+
+  def valid_marker?
+    marker.size == 1 && !!(marker =~ /[A-Z]/)
+  end
+
+  def duplicate_marker?
+    marker == opponent.marker
+  end
+
+  def marker_error_prompt
+    if !valid_marker?
+      prompt "Invalid input. Please enter a single letter:"
+    elsif duplicate_marker?
+      prompt "That is #{opponent.name}'s marker. Please choose another."
+    end
+  end
+end
+
+class Computer < Player
+  COMPUTER_NAMES = %w(Hal R2D2 Sonny Optimus Ultron)
+
+  def choose_name
+    self.name = COMPUTER_NAMES.sample
+    loop do
+      break unless duplicate_name?
+      self.name = COMPUTER_NAMES.sample
+    end
+  end
+
+  def choose_marker
+    self.marker =
+      if opponent.marker.nil? || opponent.marker == 'O'
+        'X'
+      else
+        'O'
+      end
+  end
+
+  def move(board)
+    delay_animation("#{name} is thinking", 4)
+    square_selection =
+      win(board) || block(board) || take_center(board) ||
+      board.unmarked_keys.sample
+    board[square_selection] = marker
+  end
+
+  private
+
+  def center_available?(board)
+    board[5].unmarked?
+  end
+
+  def win(board)
+    board.vulnerable_lines_with_squares.each do |line|
+      if line.values.count { |square| square.marker == marker } == 2
+        return line.select { |_, v| v.unmarked? }.keys.first
+      end
+    end
+    nil
+  end
+
+  def block(board)
+    lines = board.vulnerable_lines_with_squares
+    return if lines.empty?
+    lines.first.select { |_, v| v.unmarked? }.keys.first
+  end
+
+  def take_center(board)
+    5 if board[5].unmarked?
+  end
 end
 
 class TTTGame
+  include Formattable, Displayable, Animatable
+
   WINNING_SCORE = 3
 
-  attr_reader :board, :player1, :player2, :players
+  attr_reader :board, :players, :player1, :player2
   attr_accessor :player_going_first, :current_player
 
   def initialize
     @board = Board.new
-    @player1 = Player.new("Player 1")
-    @player2 = Player.new("Player 2")
-    @players = [@player1, @player2]
-    @player_going_first = @players.sample
   end
 
   def play
     clear
     display_welcome_message
     initialize_players
+    clear
     main_game
     display_goodbye_message
   end
@@ -157,13 +454,13 @@ class TTTGame
   private
 
   def main_game
+    display_introduction
     loop do
-      puts "First to #{WINNING_SCORE} points wins!"
       play_match
       display_match_result
       break unless play_again?
-      match_reset
       display_play_again_message
+      match_reset
     end
   end
 
@@ -173,191 +470,73 @@ class TTTGame
       display_result
       update_scores
       break if winning_score_reached
-      display_scores
       round_reset
     end
   end
 
   def play_round
-    puts "#{player_going_first.name} goes first."
-    self.current_player = player_going_first
-    sleep(2)
-    display_board
+    display_score_and_board
     loop do
-      puts "It is #{current_player.name}'s turn."
+      prompt "It is #{current_player.name}'s turn."
       current_player_moves
       break if board.someone_won? || board.full?
-      clear_screen_and_display_board
+      clear_screen_and_display_score_and_board
     end
   end
 
   def initialize_players
     num_humans = solicit_num_human_players
-    initialize_human_player(player1)
-    case num_humans
-    when 1 then initialize_computer_player
-    when 2 then initialize_human_player(player2)
-    end
+    create_players(num_humans)
+    assign_game_attributes
+    assign_player_attributes
   end
 
   def solicit_num_human_players
-    puts "How many people are playing?"
+    prompt "How many people are playing?"
     answer = gets.chomp
-    until %w(1 2).include?(answer)
-      puts "Sorry, must choose 1 or 2."
+    until %w(0 1 2).include?(answer)
+      prompt "Sorry, must choose 1 or 2."
       answer = gets.chomp
     end
     answer.to_i
   end
 
-  def initialize_human_player(player)
-    player.type = :human
-    choose_name(player)
-    choose_marker(player)
+  def create_players(num_humans)
+    @player1 = if num_humans > 0
+                 Human.new("Player 1")
+               else
+                 Computer.new
+               end
+    @player2 = if num_humans > 1
+                 Human.new("Player 2")
+               else
+                 Computer.new
+               end
   end
 
-  def initialize_computer_player
-    player2.type = :computer
-    player2.name = Player::COMPUTER_NAMES.sample
-    player2.marker = player1.marker == 'O' ? 'X' : 'O'
+  def assign_game_attributes
+    @players = [@player1, @player2]
+    self.player_going_first = players.sample
+    self.current_player = player_going_first
   end
 
-  def choose_name(player)
-    puts "#{player.name} please enter your name:"
-    input = gets.chomp
-    player.name = input unless input.empty?
-  end
+  def assign_player_attributes
+    player1.opponent = player2
+    player2.opponent = player1
 
-  def choose_marker(player)
-    puts "Please choose a letter to use as your marker:"
-    input = nil
-    loop do
-      input = gets.chomp.upcase
-      if !valid_marker?(input)
-        puts "Invalid input. Please enter a single letter:"
-      elsif duplicate_marker?(input)
-        puts "That is #{player1.name}'s marker. Please choose another."
-      else
-        break
-      end
+    players.each do |player|
+      player.choose_name
+      player.choose_marker
     end
-    player.marker = input
-  end
-
-  def valid_marker?(input)
-    input.size == 1 && !!(input =~ /[A-Z]/)
-  end
-
-  def duplicate_marker?(input)
-    input == player1.marker
-  end
-
-  def line_break
-    puts ""
-  end
-
-  def joinor(list, delimiter = ', ', conjunction = 'or')
-    case list.size
-    when (0..1) then list.join
-    when 2 then list.join(" #{conjunction} ")
-    else list[0..-2].join(delimiter) + "#{delimiter}#{conjunction} #{list[-1]}"
-    end
-  end
-
-  def clear
-    system 'clear'
-  end
-
-  def display_welcome_message
-    puts "Welcome to Tic Tac Toe!"
-    line_break
-  end
-
-  def display_goodbye_message
-    puts "Thanks for playing Tic Tac Toe! Goodbye!"
-  end
-
-  def display_board
-    puts "#{player1.name}'s marker: #{player1.marker} | " \
-         "#{player2.name}'s marker: #{player2.marker}"
-    line_break
-    board.draw
-    line_break
-  end
-
-  def clear_screen_and_display_board
-    clear
-    display_board
   end
 
   def current_player_moves
-    if current_player.human?
-      human_moves(current_player)
-    else
-      computer_moves
-    end
+    current_player.move(board)
     switch_current_player
   end
 
   def switch_current_player
     self.current_player = current_player == player1 ? player2 : player1
-  end
-
-  def human_moves(player)
-    puts "Choose a square (#{joinor(board.unmarked_keys)}): "
-    square = nil
-    loop do
-      square = gets.chomp.to_i
-      break if board.unmarked_keys.include?(square)
-      puts "Sorry, that's not a valid choice."
-    end
-
-    board[square] = player.marker
-  end
-
-  def computer_moves
-    puts "#{player2.name} is thinking..."
-    sleep(4)
-    computer_square_selection =
-      computer_win || computer_block || computer_take_center ||
-      board.unmarked_keys.sample
-    board[computer_square_selection] = player2.marker
-  end
-
-  def center_available?
-    board[5].unmarked?
-  end
-
-  def computer_win
-    board.vulnerable_lines_with_squares.each do |line|
-      if line.values.count { |square| square.marker == player2.marker } == 2
-        return line.select { |_, v| v.unmarked? }.keys.first
-      end
-    end
-    nil
-  end
-
-  def computer_block
-    lines = board.vulnerable_lines_with_squares
-    return if lines.empty?
-    lines.first.select { |_, v| v.unmarked? }.keys.first
-  end
-
-  def computer_take_center
-    5 if board[5].unmarked?
-  end
-
-  def display_result
-    clear_screen_and_display_board
-
-    case board.winning_marker
-    when player1.marker
-      puts "#{player1.name} won!"
-    when player2.marker
-      puts "#{player2.name} won!"
-    else
-      puts "It's a tie!"
-    end
   end
 
   def update_scores
@@ -371,31 +550,6 @@ class TTTGame
     end
   end
 
-  def display_scores
-    puts "#{player1.name}: #{player1.score} | " \
-         "#{player2.name}: #{player2.score}"
-  end
-
-  def display_match_result
-    case player1 <=> player2
-    when -1
-      puts "#{player2.name} won the match!"
-    when 1
-      puts "#{player1.name} won the match!"
-    else
-      puts "The match is a tie!"
-    end
-    display_final_score
-  end
-
-  def display_final_score
-    puts "====================="
-    puts "     FINAL SCORE     "
-    puts "#{player1.name} - #{player1.score}"
-    puts "#{player2.name} - #{player2.score}"
-    puts "====================="
-  end
-
   def winning_score_reached
     players.any? { |player| player.score >= WINNING_SCORE }
   end
@@ -403,10 +557,10 @@ class TTTGame
   def play_again?
     answer = nil
     loop do
-      puts "Rematch? (y/n)"
+      prompt "Rematch? (y/n)"
       answer = gets.chomp.downcase
       break if %w(y n).include?(answer)
-      puts "Sorry, must be y or n."
+      prompt "Sorry, must be y or n."
     end
 
     answer == 'y'
@@ -418,8 +572,7 @@ class TTTGame
   end
 
   def round_reset
-    puts "Reseting the board..."
-    sleep(4)
+    delay_animation("Reseting the board", 3)
     board.reset
     switch_who_goes_first
     clear
@@ -428,11 +581,6 @@ class TTTGame
   def match_reset
     round_reset
     players.each { |player| player.score = 0 }
-  end
-
-  def display_play_again_message
-    puts "Let's play again!"
-    line_break
   end
 end
 
