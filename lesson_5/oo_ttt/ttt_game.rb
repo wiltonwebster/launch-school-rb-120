@@ -91,7 +91,7 @@ module Displayable
     puts "#{player1.name} (#{player1.marker}) - #{player1.score}"
     puts "#{player2.name} (#{player2.marker}) - #{player2.score}"
     puts "====================="
-    puts "First to #{TTTGame::WINNING_SCORE} point wins!"
+    puts "First to #{TTTGame::WINNING_SCORE} points wins!"
   end
 
   def display_match_result
